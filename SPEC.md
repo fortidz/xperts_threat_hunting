@@ -19,6 +19,8 @@ A single-resource-group Azure deployment providing a threat hunting lab environm
 | `admin_username` | `string` | `"datalake"` | Admin username for all VMs |
 | `admin_password` | `string` | — | Admin password for all VMs (sensitive) |
 | `deploy_date` | `string` | — | Date string used in storage account name (format: `YYYYMMDD`, e.g. `20260224`) |
+| `fortigate_port1_ip` | `string` | — | Static private IP for FortiGate port1 NIC (must be within `snet-external` — `192.168.27.0/27`) |
+| `fortigate_port2_ip` | `string` | — | Static private IP for FortiGate port2 NIC (must be within `snet-internal` — `192.168.27.32/27`) |
 
 ---
 
@@ -96,10 +98,10 @@ All resources below are deployed into this single resource group.
 
 ### NICs
 
-| NIC | Name | Subnet | IP Allocation | Public IP |
-|---|---|---|---|---|
-| port1 (NIC1) | `DL-FG-NIC1` | `snet-external` | Dynamic | `DL-FG-PIP` (Standard SKU) |
-| port2 (NIC2) | `DL-FG-NIC2` | `snet-internal` | Dynamic | None |
+| NIC | Name | Subnet | IP Allocation | Private IP | Public IP |
+|---|---|---|---|---|---|
+| port1 (NIC1) | `DL-FG-NIC1` | `snet-external` | Static | `var.fortigate_port1_ip` | `DL-FG-PIP` (Standard SKU) |
+| port2 (NIC2) | `DL-FG-NIC2` | `snet-internal` | Static | `var.fortigate_port2_ip` | None |
 
 > The UDR next-hop for snet-internal points to the private IP of `DL-FG-NIC2`.
 
