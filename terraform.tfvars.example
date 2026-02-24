@@ -1,0 +1,66 @@
+# =============================================================================
+# Xperts Threat Hunting Lab — Example Variable Values
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored — never commit credentials.
+# =============================================================================
+
+###############################################################################
+# Infrastructure Identity
+###############################################################################
+
+resource_group_name = "rg-threathunting"
+location            = "eastus"
+
+###############################################################################
+# Credentials
+# Supply via env variable to avoid writing to disk:
+#   export TF_VAR_admin_password="YourStr0ng!Pass"
+###############################################################################
+
+admin_username = "datalake"
+# admin_password = "CHANGE_ME_12chars_min!"   # sensitive — use TF_VAR_admin_password
+
+###############################################################################
+# FortiGate Static IPs
+# Must be within their respective subnet usable ranges:
+#   snet-external: 192.168.27.0/27  (usable .1–.30)
+#   snet-internal: 192.168.27.32/27 (usable .36–.62, excluding Azure-reserved .32-.35 .63)
+###############################################################################
+
+fortigate_port1_ip = "192.168.27.4"   # FortiGate port1 (external/management)
+fortigate_port2_ip = "192.168.27.36"  # FortiGate port2 (internal) — UDR next-hop
+
+###############################################################################
+# Storage
+# 8-digit date prefix for storage account name (e.g. 20260224 → 20260224sdatalake)
+###############################################################################
+
+deploy_date = "20260224"
+
+###############################################################################
+# FortiOS / FortiAnalyzer Image Versions
+###############################################################################
+
+fortigate_image_version     = "7.6.6"
+fortianalyzer_image_version = "7.6.6"
+
+###############################################################################
+# FortiFlex License Bootstrap (optional)
+# Leave empty ("") to skip — required only for private-offer BYOL via FortiFlex.
+# Supply via env variable:
+#   export TF_VAR_fortiflex_fgt_token="TOKEN_VALUE"
+#   export TF_VAR_fortiflex_faz_token="TOKEN_VALUE"
+###############################################################################
+
+# fortiflex_fgt_token = ""   # sensitive — use TF_VAR_fortiflex_fgt_token
+# fortiflex_faz_token = ""   # sensitive — use TF_VAR_fortiflex_faz_token
+
+###############################################################################
+# Optional Tags
+###############################################################################
+
+tags = {
+  "cost-center" = "security-ops"
+  "owner"       = "your-email@example.com"
+}

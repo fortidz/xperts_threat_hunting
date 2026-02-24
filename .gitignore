@@ -1,0 +1,34 @@
+# Terraform state — contains secrets and resource IDs
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variable files with actual values (may contain passwords/tokens)
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working directory
+.terraform/
+.terraform.lock.hcl
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files — local developer overrides, not for version control
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config
+.terraformrc
+terraform.rc
+
+# Editor / OS artifacts
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
