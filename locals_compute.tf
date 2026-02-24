@@ -8,6 +8,7 @@ locals {
       name              = local.fortigate_pip_name
       sku               = "Standard"
       allocation_method = "Static"
+      domain_name_label = null
       tags              = local.common_tags
     })
 
@@ -15,6 +16,9 @@ locals {
       name              = local.fortianalyzer_pip_name
       sku               = "Standard"
       allocation_method = "Static"
+      # DNS label provides a stable FQDN for FortiGate log profiles and management bookmarks:
+      # <prefix>-faz-pip.<region>.cloudapp.azure.com
+      domain_name_label = lower("${local.deployment_prefix}-faz-pip")
       tags              = local.common_tags
     })
   }
@@ -47,12 +51,15 @@ locals {
       tags                  = local.common_tags
     })
 
-    # FortiAnalyzer — single NIC in snet-external, dynamic private IP
+    # FortiAnalyzer — single NIC in snet-external, static private IP.
+    # Static IP is required: FortiGate log profiles and device registration
+    # point to a fixed FAZ address; dynamic IPs break all connected FortiGates
+    # after any VM restart.
     (local.fortianalyzer_nic_name) = merge(local.common_resource_attributes, {
       name                  = local.fortianalyzer_nic_name
       subnet_key            = "snet-external"
-      private_ip_address    = null
-      private_ip_alloc      = "Dynamic"
+      private_ip_address    = var.fortianalyzer_ip
+      private_ip_alloc      = "Static"
       public_ip_key         = local.fortianalyzer_pip_name
       ip_forwarding_enabled = false
       tags                  = local.common_tags
@@ -95,6 +102,7 @@ locals {
       image_version  = var.fortigate_image_version
       os_disk_size   = local.fortigate_disk_size_gb
       has_plan       = true
+      has_identity   = false
 
       # Inject FortiFlex bootstrap when token is provided.
       # The multipart/mixed MIME envelope is the format FortiOS expects.
@@ -116,11 +124,20 @@ locals {
       image_version  = var.fortianalyzer_image_version
       os_disk_size   = local.fortianalyzer_disk_size_gb
       has_plan       = true
+      # System-assigned identity enables Azure AD authentication for the FAZ VM,
+      # allowing it to access Azure services (Storage, Key Vault) without credentials.
+      has_identity = true
 
-      custom_data = var.fortiflex_faz_token != "" ? base64encode(templatefile(
+      # Always inject custom_data for FAZ: sets hostname at first boot and
+      # optionally applies the FortiFlex token. Hostname config is required
+      # regardless of licensing method.
+      custom_data = base64encode(templatefile(
         "${path.module}/cloud-init/fortianalyzer.tpl",
-        { var_fortiflex_token = var.fortiflex_faz_token }
-      )) : null
+        {
+          var_faz_vm_name     = local.fortianalyzer_vm_name
+          var_fortiflex_token = var.fortiflex_faz_token
+        }
+      ))
 
       tags = local.common_tags
     })
@@ -135,6 +152,7 @@ locals {
       image_version  = local.ubuntu_version
       os_disk_size   = local.workload_disk_size_gb
       has_plan       = false
+      has_identity   = false
       custom_data    = null
       tags           = local.common_tags
     })

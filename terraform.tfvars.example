@@ -30,6 +30,7 @@ admin_username = "datalake"
 
 fortigate_port1_ip = "192.168.27.4"   # FortiGate port1 (external/management)
 fortigate_port2_ip = "192.168.27.36"  # FortiGate port2 (internal) — UDR next-hop
+fortianalyzer_ip   = "192.168.27.5"   # FortiAnalyzer NIC (external) — static, referenced by FortiGate log profiles
 
 ###############################################################################
 # Storage

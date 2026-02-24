@@ -68,8 +68,13 @@ output "fortianalyzer_public_ip" {
 }
 
 output "fortianalyzer_private_ip" {
-  description = "Dynamic private IP of FortiAnalyzer NIC (snet-external)."
+  description = "Static private IP of FortiAnalyzer NIC (snet-external)."
   value       = azurerm_network_interface.nic[local.fortianalyzer_nic_name].private_ip_address
+}
+
+output "fortianalyzer_fqdn" {
+  description = "DNS FQDN of DL-FAZ-PIP (<prefix>-faz-pip.<region>.cloudapp.azure.com). Use this in FortiGate log profiles."
+  value       = azurerm_public_ip.pip[local.fortianalyzer_pip_name].fqdn
 }
 
 ###############################################################################

@@ -101,6 +101,23 @@ variable "fortigate_port2_ip" {
   }
 }
 
+variable "fortianalyzer_ip" {
+  description = <<-EOT
+    Static private IP for the FortiAnalyzer NIC (snet-external).
+    Must be within snet-external: 192.168.27.0/27 (usable .1-.30, Azure reserves .0 .1 .2 .3 .31).
+    Must not conflict with fortigate_port1_ip.
+    Example: 192.168.27.5
+    Note: FortiGate log profiles and device registration point to this IP;
+    a static address prevents connectivity loss after VM restarts.
+  EOT
+  type = string
+
+  validation {
+    condition     = can(regex("^192\\.168\\.27\\.([1-9]|[1-2][0-9]|30)$", var.fortianalyzer_ip))
+    error_message = "fortianalyzer_ip must be within 192.168.27.1–192.168.27.30 (snet-external usable range)."
+  }
+}
+
 ###############################################################################
 # Required — Storage
 ###############################################################################

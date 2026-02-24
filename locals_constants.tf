@@ -23,6 +23,9 @@ locals {
   fgt_port_541      = "541"  # Log forwarding / HA heartbeat
   fgt_port_8080     = "8080" # Alternate HTTP service port
 
+  # FortiAnalyzer device registration / syslog inbound (from FortiGate)
+  faz_device_reg_port = "514"
+
   # SSH for workload VM (snet-internal)
   ssh_port = "22"
 

@@ -106,6 +106,18 @@ locals {
           description                = "FortiGate alternate HTTP service port"
         },
         {
+          name                       = "Allow-514"
+          priority                   = 150
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "Tcp"
+          source_port_range          = "*"
+          destination_port_range     = local.faz_device_reg_port
+          source_address_prefix      = "*"
+          destination_address_prefix = "*"
+          description                = "FortiAnalyzer device registration and syslog inbound from FortiGate"
+        },
+        {
           name                       = "Deny-All-Inbound"
           priority                   = 4096
           direction                  = "Inbound"

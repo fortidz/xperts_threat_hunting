@@ -45,6 +45,16 @@ resource "azurerm_linux_virtual_machine" "vm" {
     }
   }
 
+  # System-assigned managed identity — enabled only for FortiAnalyzer.
+  # Allows the VM to authenticate to Azure services without stored credentials.
+  dynamic "identity" {
+    for_each = each.value.has_identity ? [1] : []
+
+    content {
+      type = "SystemAssigned"
+    }
+  }
+
   # FortiFlex bootstrap — pre-encoded base64 in locals_compute.tf.
   # null means no custom_data is injected (Ubuntu VM or no token supplied).
   custom_data = each.value.custom_data
