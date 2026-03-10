@@ -25,6 +25,9 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# SSL certificate files (private keys must never be committed)
+certs/
+
 # Editor / OS artifacts
 .DS_Store
 *.swp

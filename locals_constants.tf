@@ -17,11 +17,12 @@ locals {
   # Firewall management ports — FortiGate external NIC (port1)
   ###########################################################################
 
-  fgt_port_https    = "443"  # FortiGate HTTPS GUI / SSL-VPN
-  fgt_port_http     = "80"   # FortiGate HTTP (redirect / captive portal)
-  fgt_port_ssh_mgmt = "622"  # FortiGate custom SSH management port
-  fgt_port_541      = "541"  # Log forwarding / HA heartbeat
-  fgt_port_8080     = "8080" # Alternate HTTP service port
+  fgt_port_https       = "443"   # FortiGate HTTPS GUI / SSL-VPN
+  fgt_port_http        = "80"    # FortiGate HTTP (redirect / captive portal)
+  fgt_port_ssh_mgmt    = "622"   # FortiGate custom SSH management port
+  fgt_port_541         = "541"   # Log forwarding / HA heartbeat
+  fgt_port_admin_https = "10443" # FortiGate custom HTTPS admin port (admin-sport) and fortios provider API endpoint
+  fgt_port_8080        = "8080"  # Alternate HTTP service port
 
   # FortiAnalyzer device registration / syslog inbound (from FortiGate)
   faz_device_reg_port = "514"
@@ -75,7 +76,7 @@ locals {
   fortianalyzer_nic_name = "DL-FAZ-NIC"
   workload_nic_name      = "watchtower-NIC"
 
-  fortigate_pip_name    = "DL-FG-PIP"
+  fortigate_pip_name     = "DL-FG-PIP"
   fortianalyzer_pip_name = "DL-FAZ-PIP"
 
   ###########################################################################

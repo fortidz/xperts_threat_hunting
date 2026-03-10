@@ -18,7 +18,7 @@ locals {
       allocation_method = "Static"
       # DNS label provides a stable FQDN for FortiGate log profiles and management bookmarks:
       # <prefix>-faz-pip.<region>.cloudapp.azure.com
-      domain_name_label = lower("${local.deployment_prefix}-faz-pip")
+      domain_name_label = "dl-faz-pip"
       tags              = local.common_tags
     })
   }
@@ -30,11 +30,11 @@ locals {
   network_interfaces = {
     # FortiGate port1 — external-facing, carries management traffic and internet
     (local.fortigate_nic1_name) = merge(local.common_resource_attributes, {
-      name                 = local.fortigate_nic1_name
-      subnet_key           = "snet-external"
-      private_ip_address   = var.fortigate_port1_ip
-      private_ip_alloc     = "Static"
-      public_ip_key        = local.fortigate_pip_name
+      name               = local.fortigate_nic1_name
+      subnet_key         = "snet-external"
+      private_ip_address = var.fortigate_port1_ip
+      private_ip_alloc   = "Static"
+      public_ip_key      = local.fortigate_pip_name
       # ip_forwarding_enabled is required on both NICs for NVA packet routing
       ip_forwarding_enabled = true
       tags                  = local.common_tags
@@ -106,10 +106,15 @@ locals {
 
       # Inject FortiFlex bootstrap when token is provided.
       # The multipart/mixed MIME envelope is the format FortiOS expects.
-      custom_data = var.fortiflex_fgt_token != "" ? base64encode(templatefile(
+      custom_data = base64encode(templatefile(
         "${path.module}/cloud-init/fortigate.tpl",
-        { var_fortiflex_token = var.fortiflex_fgt_token }
-      )) : null
+        {
+          var_fortiflex_token = var.fortiflex_fgt_token
+          var_fullchain_pem   = file("${path.module}/certs/fullchain.pem")
+          var_privkey_pem     = file("${path.module}/certs/privkey.pem")
+          var_chain_pem       = file("${path.module}/certs/chain.pem")
+        }
+      ))
 
       tags = local.common_tags
     })

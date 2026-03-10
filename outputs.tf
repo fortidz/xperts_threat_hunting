@@ -112,9 +112,9 @@ output "storage_primary_blob_endpoint" {
 output "deployment_summary" {
   description = "High-level summary of the deployed lab environment."
   value = {
-    resource_group   = azurerm_resource_group.rg.name
-    location         = azurerm_resource_group.rg.location
-    vnet             = local.vnet_name
+    resource_group = azurerm_resource_group.rg.name
+    location       = azurerm_resource_group.rg.location
+    vnet           = local.vnet_name
     fortigate = {
       vm_name          = local.fortigate_vm_name
       public_ip        = azurerm_public_ip.pip[local.fortigate_pip_name].ip_address
@@ -123,9 +123,9 @@ output "deployment_summary" {
       image_version    = var.fortigate_image_version
     }
     fortianalyzer = {
-      vm_name     = local.fortianalyzer_vm_name
-      public_ip   = azurerm_public_ip.pip[local.fortianalyzer_pip_name].ip_address
-      private_ip  = azurerm_network_interface.nic[local.fortianalyzer_nic_name].private_ip_address
+      vm_name       = local.fortianalyzer_vm_name
+      public_ip     = azurerm_public_ip.pip[local.fortianalyzer_pip_name].ip_address
+      private_ip    = azurerm_network_interface.nic[local.fortianalyzer_nic_name].private_ip_address
       image_version = var.fortianalyzer_image_version
     }
     workload = {

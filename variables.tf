@@ -78,7 +78,7 @@ variable "fortigate_port1_ip" {
     Must be within snet-external: 192.168.27.0/27 (usable .1-.30, Azure reserves .0 .1 .2 .3 .31).
     Example: 192.168.27.4
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^192\\.168\\.27\\.([1-9]|[1-2][0-9]|30)$", var.fortigate_port1_ip))
@@ -93,7 +93,7 @@ variable "fortigate_port2_ip" {
     Example: 192.168.27.36
     Note: This IP is also the UDR next-hop for snet-internal default route.
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^192\\.168\\.27\\.(3[6-9]|[4-5][0-9]|6[0-2])$", var.fortigate_port2_ip))
@@ -110,7 +110,7 @@ variable "fortianalyzer_ip" {
     Note: FortiGate log profiles and device registration point to this IP;
     a static address prevents connectivity loss after VM restarts.
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^192\\.168\\.27\\.([1-9]|[1-2][0-9]|30)$", var.fortianalyzer_ip))
@@ -128,7 +128,7 @@ variable "deploy_date" {
     Format: YYYYMMDD (e.g. 20260224).
     Resulting storage account name: <deploy_date>sdatalake (e.g. 20260224sdatalake, 16 chars).
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^[0-9]{8}$", var.deploy_date))
@@ -146,8 +146,8 @@ variable "fortigate_image_version" {
     Common values: 7.6.6  |  8.0.0
     Run: az vm image list --publisher fortinet --offer fortinet_fortigate-vm_v5 --all --query "[].version"
   EOT
-  type    = string
-  default = "7.6.6"
+  type        = string
+  default     = "7.6.6"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.fortigate_image_version))
@@ -161,8 +161,8 @@ variable "fortianalyzer_image_version" {
     Common values: 7.6.6  |  8.0.0
     Run: az vm image list --publisher fortinet --offer fortinet-fortianalyzer --all --query "[].version"
   EOT
-  type    = string
-  default = "7.6.6"
+  type        = string
+  default     = "7.6.6"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.fortianalyzer_image_version))
@@ -181,9 +181,9 @@ variable "fortiflex_fgt_token" {
     This bypasses the FortiCloud registration flow required for private-offer BYOL.
     Leave empty ("") to skip bootstrap injection.
   EOT
-  type      = string
-  default   = ""
-  sensitive = true
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "fortiflex_faz_token" {
@@ -192,9 +192,55 @@ variable "fortiflex_faz_token" {
     When provided, the VM custom_data injects: execute vm-licence <token>
     Leave empty ("") to skip bootstrap injection.
   EOT
-  type      = string
-  default   = ""
-  sensitive = true
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+###############################################################################
+# Required — FortiGate Configuration (fortios provider)
+###############################################################################
+
+variable "fortigate_api_hostname" {
+  description = <<-EOT
+    FortiGate API endpoint FQDN for the fortios Terraform provider.
+    Format: dl-fg-<student-number>.sxroomec.net:10443
+    DNS must resolve to the FortiGate public IP before applying fortios resources.
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+:\\d+$", var.fortigate_api_hostname))
+    error_message = "fortigate_api_hostname must be in host:port format (e.g. dl-fg-01.sxroomec.net:10443)."
+  }
+}
+
+variable "fortigate_api_token" {
+  description = <<-EOT
+    REST API token for the fortios Terraform provider.
+    Generate on FortiGate: System > Administrators > REST API Admin.
+    Supply via TF_VAR_fortigate_api_token env variable or a git-ignored terraform.tfvars.
+  EOT
+  type        = string
+  sensitive   = true
+}
+
+variable "ipsec_psk" {
+  description = "Pre-shared key for IPsec VPN phase1 (remote access dialup)."
+  type        = string
+  sensitive   = true
+}
+
+variable "vpnuser1_password" {
+  description = "Password for local user vpnuser1 (IPsec VPN remote access)."
+  type        = string
+  sensitive   = true
+}
+
+variable "guest_password" {
+  description = "Password for local user guest."
+  type        = string
+  sensitive   = true
 }
 
 ###############################################################################

@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
+    fortios = {
+      source  = "fortinetdev/fortios"
+      version = "~> 1.22"
+    }
   }
 }
 
@@ -16,4 +20,10 @@ provider "azurerm" {
       delete_os_disk_on_deletion = true
     }
   }
+}
+
+provider "fortios" {
+  hostname = var.fortigate_api_hostname
+  token    = var.fortigate_api_token
+  insecure = false # valid Let's Encrypt wildcard cert injected at bootstrap
 }

@@ -114,9 +114,26 @@ All resources below are deployed into this single resource group.
 > IP forwarding is enabled on both NICs — required for NVA packet routing between subnets.
 > The UDR next-hop for `snet-internal` points to `var.fortigate_port2_ip`.
 
-### FortiFlex Bootstrap (`custom_data`)
+### Bootstrap (`custom_data`)
 
-Injected **only when** `var.fortiflex_fgt_token` is non-empty:
+**Always injected** — provides a complete day-zero configuration so the FortiGate is functional immediately after first boot. FortiFlex token injection is conditional. Inspired by the [40net-cloud/terraform-azure-fortigate](https://github.com/40net-cloud/terraform-azure-fortigate) reference architecture.
+
+The bootstrap configures:
+
+| Section | Detail |
+|---|---|
+| **Hostname** | `DL-FG` |
+| **Admin HTTPS port** | `443` (default, explicit for clarity) |
+| **Admin timeout** | 120 minutes |
+| **SDN Connector** | Azure type, metadata IAM — enables automatic cloud resource discovery |
+| **port1 (external)** | Static IP `var.fortigate_port1_ip` / `/27` mask, allowaccess: ping https ssh fgfm |
+| **port2 (internal)** | Static IP `var.fortigate_port2_ip` / `/27` mask, allowaccess: ping |
+| **Static route 1** | Default `0.0.0.0/0` via `snet-external` gateway (`cidrhost(snet-external, 1)`) on port1 |
+| **Static route 2** | `snet-internal` CIDR via `snet-internal` gateway (`cidrhost(snet-internal, 1)`) on port2 |
+| **Auto-update** | Disabled — prevents interference during bootstrap |
+| **FortiFlex license** | Conditional: `execute vm-licence <token>` only when `var.fortiflex_fgt_token` is non-empty |
+
+> Gateway addresses are computed using `cidrhost()` from the subnet CIDRs defined in `locals_constants.tf`. For the default `/27` layout: snet-external gateway = `192.168.27.1`, snet-internal gateway = `192.168.27.33`.
 
 ```
 Content-Type: multipart/mixed; boundary="==FORTIGATE-BOOTSTRAP=="
@@ -125,12 +142,54 @@ MIME-Version: 1.0
 --==FORTIGATE-BOOTSTRAP==
 Content-Type: text/plain; charset="us-ascii"
 
+config system global
+    set hostname "DL-FG"
+    set admin-sport 443
+    set admintimeout 120
+    set timezone 12
+end
+config system sdn-connector
+    edit "azuresdn"
+        set type azure
+        set use-metadata-iam enable
+    next
+end
+config system interface
+    edit "port1"
+        set alias "external"
+        set mode static
+        set ip <fortigate_port1_ip> <snet_external_mask>
+        set allowaccess ping https ssh fgfm
+    next
+    edit "port2"
+        set alias "internal"
+        set mode static
+        set ip <fortigate_port2_ip> <snet_internal_mask>
+        set allowaccess ping
+    next
+end
+config router static
+    edit 1
+        set gateway <snet_external_gateway>
+        set device "port1"
+    next
+    edit 2
+        set dst <snet_internal_cidr>
+        set gateway <snet_internal_gateway>
+        set device "port2"
+    next
+end
 config system auto-update
     set status disable
 end
+# Only if var.fortiflex_fgt_token is non-empty:
 execute vm-licence <fortiflex_fgt_token>
 --==FORTIGATE-BOOTSTRAP==--
 ```
+
+### Lifecycle Rule
+
+All VMs use `lifecycle { ignore_changes = [custom_data] }`. This prevents Terraform from destroying and recreating a VM when only the bootstrap configuration changes — custom_data is only evaluated at first boot and has no effect on running instances.
 
 ---
 

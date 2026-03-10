@@ -58,6 +58,18 @@ locals {
           description                = "FortiGate HTTPS GUI and SSL-VPN"
         },
         {
+          name                       = "Allow-Admin-HTTPS"
+          priority                   = 105
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "Tcp"
+          source_port_range          = "*"
+          destination_port_range     = local.fgt_port_admin_https
+          source_address_prefix      = "*"
+          destination_address_prefix = "*"
+          description                = "FortiGate admin HTTPS (admin-sport) and fortios provider API"
+        },
+        {
           name                       = "Allow-HTTP"
           priority                   = 110
           direction                  = "Inbound"
@@ -190,9 +202,9 @@ locals {
 
       routes = [
         {
-          name                   = "route-default-via-fortigate"
-          address_prefix         = "0.0.0.0/0"
-          next_hop_type          = "VirtualAppliance"
+          name           = "route-default-via-fortigate"
+          address_prefix = "0.0.0.0/0"
+          next_hop_type  = "VirtualAppliance"
           # UDR next-hop is the FortiGate internal (port2) static IP,
           # forcing all egress from snet-internal through the NVA.
           next_hop_in_ip_address = var.fortigate_port2_ip
