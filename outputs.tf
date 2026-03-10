@@ -54,8 +54,8 @@ output "fortigate_port2_private_ip" {
 }
 
 output "fortigate_management_url" {
-  description = "FortiGate HTTPS management URL."
-  value       = "https://${azurerm_public_ip.pip[local.fortigate_pip_name].ip_address}"
+  description = "FortiGate HTTPS management URL (admin GUI on port 10443)."
+  value       = "https://${local.fortigate_fqdn}:${local.fgt_port_admin_https}"
 }
 
 ###############################################################################
@@ -72,9 +72,14 @@ output "fortianalyzer_private_ip" {
   value       = azurerm_network_interface.nic[local.fortianalyzer_nic_name].private_ip_address
 }
 
+output "fortigate_fqdn" {
+  description = "FortiGate DNS FQDN (Route 53 managed)."
+  value       = local.fortigate_fqdn
+}
+
 output "fortianalyzer_fqdn" {
-  description = "DNS FQDN of DL-FAZ-PIP (<prefix>-faz-pip.<region>.cloudapp.azure.com). Use this in FortiGate log profiles."
-  value       = azurerm_public_ip.pip[local.fortianalyzer_pip_name].fqdn
+  description = "FortiAnalyzer DNS FQDN (Route 53 managed)."
+  value       = local.fortianalyzer_fqdn
 }
 
 ###############################################################################
@@ -115,8 +120,11 @@ output "deployment_summary" {
     resource_group = azurerm_resource_group.rg.name
     location       = azurerm_resource_group.rg.location
     vnet           = local.vnet_name
+    student_number = var.student_number
     fortigate = {
       vm_name          = local.fortigate_vm_name
+      fqdn             = local.fortigate_fqdn
+      management_url   = "https://${local.fortigate_fqdn}:${local.fgt_port_admin_https}"
       public_ip        = azurerm_public_ip.pip[local.fortigate_pip_name].ip_address
       port1_private_ip = azurerm_network_interface.nic[local.fortigate_nic1_name].private_ip_address
       port2_private_ip = azurerm_network_interface.nic[local.fortigate_nic2_name].private_ip_address
@@ -124,6 +132,7 @@ output "deployment_summary" {
     }
     fortianalyzer = {
       vm_name       = local.fortianalyzer_vm_name
+      fqdn          = local.fortianalyzer_fqdn
       public_ip     = azurerm_public_ip.pip[local.fortianalyzer_pip_name].ip_address
       private_ip    = azurerm_network_interface.nic[local.fortianalyzer_nic_name].private_ip_address
       image_version = var.fortianalyzer_image_version

@@ -1,4 +1,21 @@
 ###############################################################################
+# Required — Lab Identity
+###############################################################################
+
+variable "student_number" {
+  description = <<-EOT
+    Student number for this lab instance (plain integer).
+    Used to generate unique DNS names: dl-fg-<n>.dl.sxroomec.net, dl-faz-<n>.dl.sxroomec.net
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.student_number >= 1 && var.student_number <= 999
+    error_message = "student_number must be between 1 and 999."
+  }
+}
+
+###############################################################################
 # Required — Infrastructure Identity
 ###############################################################################
 
@@ -198,22 +215,24 @@ variable "fortiflex_faz_token" {
 }
 
 ###############################################################################
-# Required — FortiGate Configuration (fortios provider)
+# Required — AWS (Route 53 DNS)
 ###############################################################################
 
-variable "fortigate_api_hostname" {
-  description = <<-EOT
-    FortiGate API endpoint FQDN for the fortios Terraform provider.
-    Format: dl-fg-<student-number>.sxroomec.net:10443
-    DNS must resolve to the FortiGate public IP before applying fortios resources.
-  EOT
+variable "aws_access_key" {
+  description = "AWS Access Key ID for Route 53 DNS record management."
   type        = string
-
-  validation {
-    condition     = can(regex("^[a-z0-9.-]+:\\d+$", var.fortigate_api_hostname))
-    error_message = "fortigate_api_hostname must be in host:port format (e.g. dl-fg-01.sxroomec.net:10443)."
-  }
+  sensitive   = true
 }
+
+variable "aws_secret_key" {
+  description = "AWS Secret Access Key for Route 53 DNS record management."
+  type        = string
+  sensitive   = true
+}
+
+###############################################################################
+# Required — FortiGate Configuration (fortios provider)
+###############################################################################
 
 variable "fortigate_api_token" {
   description = <<-EOT

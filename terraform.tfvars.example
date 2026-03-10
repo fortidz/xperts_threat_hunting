@@ -6,6 +6,14 @@
 # =============================================================================
 
 ###############################################################################
+# Student Identity
+# Each student gets a unique number — drives DNS names and resource isolation.
+# DNS: dl-fg-<n>.dl.sxroomec.net, dl-faz-<n>.dl.sxroomec.net
+###############################################################################
+
+student_number = 1
+
+###############################################################################
 # Infrastructure Identity
 ###############################################################################
 
@@ -58,11 +66,21 @@ fortianalyzer_image_version = "7.6.6"
 # fortiflex_faz_token = ""   # sensitive — use TF_VAR_fortiflex_faz_token
 
 ###############################################################################
-# FortiGate Configuration (fortios provider)
-# Phase 2: Set these after Azure infrastructure is deployed and FortiGate is booted.
+# AWS Credentials (Route 53 DNS)
+# Supply via env variable:
+#   export TF_VAR_aws_access_key="AKIA..."
+#   export TF_VAR_aws_secret_key="..."
 ###############################################################################
 
-fortigate_api_hostname = "dl-fg-01.sxroomec.net:10443"  # FQDN must resolve to FortiGate public IP
+# aws_access_key = "CHANGE_ME"   # sensitive — use TF_VAR_aws_access_key
+# aws_secret_key = "CHANGE_ME"   # sensitive — use TF_VAR_aws_secret_key
+
+###############################################################################
+# FortiGate Configuration (fortios provider)
+# The API hostname is computed from student_number: dl-fg-<n>.dl.sxroomec.net:10443
+# DNS records are created automatically via Route 53.
+###############################################################################
+
 # fortigate_api_token = "CHANGE_ME"   # sensitive — use TF_VAR_fortigate_api_token
 # ipsec_psk           = "CHANGE_ME"   # sensitive — use TF_VAR_ipsec_psk
 # vpnuser1_password   = "CHANGE_ME"   # sensitive — use TF_VAR_vpnuser1_password

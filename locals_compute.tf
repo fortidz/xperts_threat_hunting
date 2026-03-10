@@ -16,9 +16,8 @@ locals {
       name              = local.fortianalyzer_pip_name
       sku               = "Standard"
       allocation_method = "Static"
-      # DNS label provides a stable FQDN for FortiGate log profiles and management bookmarks:
-      # <prefix>-faz-pip.<region>.cloudapp.azure.com
-      domain_name_label = "dl-faz-pip"
+      # DNS managed by Route 53: dl-faz-<student>.dl.sxroomec.net
+      domain_name_label = null
       tags              = local.common_tags
     })
   }

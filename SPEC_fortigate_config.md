@@ -93,7 +93,7 @@ Values already available from existing Terraform:
 | log-uuid-address | enable |
 
 > `admin-server-cert "fullchain"` binds the custom Let's Encrypt wildcard
-> certificate (`*.sxroomec.net`) to the HTTPS admin GUI on port 10443. This
+> certificate (`*.dl.sxroomec.net`) to the HTTPS admin GUI on port 10443. This
 > replaces the factory-default `Fortinet_GUI_Server` self-signed certificate.
 > The certificate is injected at bootstrap (see §1a below) so it is available
 > on first boot before the `fortios` provider connects.
@@ -107,13 +107,13 @@ available on first boot — before the `fortios` Terraform provider connects.
 
 | File | Source | Purpose |
 |------|--------|---------|
-| `certs/fullchain.pem` | `sxroomec.net/fullchain.pem` | Server certificate + intermediate chain |
-| `certs/privkey.pem` | `sxroomec.net/privkey.pem` | Private key for the server certificate |
-| `certs/chain.pem` | `sxroomec.net/chain.pem` | Let's Encrypt intermediate CA |
+| `certs/fullchain.pem` | `dl.sxroomec.net/fullchain.pem` | Server certificate + intermediate chain |
+| `certs/privkey.pem` | `dl.sxroomec.net/privkey.pem` | Private key for the server certificate |
+| `certs/chain.pem` | `dl.sxroomec.net/chain.pem` | Let's Encrypt intermediate CA |
 
-> The certificate is a Let's Encrypt wildcard: CN=`sxroomec.net`,
-> SAN=`*.sxroomec.net, sxroomec.net`. It covers the FortiGate admin FQDN
-> `dl-fg-<student-number>.sxroomec.net`.
+> The certificate is a Let's Encrypt wildcard: CN=`*.dl.sxroomec.net`,
+> SAN=`*.dl.sxroomec.net, dl.sxroomec.net`. It covers the FortiGate admin FQDN
+> `dl-fg-<student-number>.dl.sxroomec.net`.
 
 **Local certificate — `"fullchain"`:**
 
@@ -457,7 +457,7 @@ fortios = {
 ```hcl
 # Provider block
 provider "fortios" {
-  hostname = var.fortigate_api_hostname
+  hostname = local.fortigate_api_host
   token    = var.fortigate_api_token
   insecure = false  # valid Let's Encrypt wildcard cert injected at bootstrap
 }
@@ -467,11 +467,13 @@ provider "fortios" {
 
 | Variable | Type | Sensitive | Default | Description |
 |----------|------|-----------|---------|-------------|
-| `fortigate_api_hostname` | string | no | — | FortiGate API endpoint FQDN (`dl-fg-<student-number>.sxroomec.net:10443`) |
+| `student_number` | number | no | — | Student identifier (1–999); drives DNS names |
 | `fortigate_api_token` | string | yes | — | REST API token for `fortios` provider |
 | `ipsec_psk` | string | yes | — | Pre-shared key for IPsec VPN phase1 |
 | `vpnuser1_password` | string | yes | — | Password for local user `vpnuser1` |
 | `guest_password` | string | yes | — | Password for local user `guest` |
+| `aws_access_key` | string | yes | — | AWS Access Key ID for Route 53 DNS management |
+| `aws_secret_key` | string | yes | — | AWS Secret Access Key for Route 53 DNS management |
 
 > No new variables for FortiAnalyzer IP or serial. The FAZ IP is already
 > available as `var.fortianalyzer_ip`. The FAZ serial is not configured
@@ -482,13 +484,13 @@ provider "fortios" {
 ```
 xperts_threat_hunting/
 ├── certs/                               # NEW: SSL certificate files (git-ignored)
-│   ├── fullchain.pem                    #   Server cert + intermediate (from sxroomec.net/)
-│   ├── privkey.pem                      #   Private key (from sxroomec.net/)
-│   └── chain.pem                        #   Let's Encrypt intermediate CA (from sxroomec.net/)
+│   ├── fullchain.pem                    #   Server cert + intermediate (from dl.sxroomec.net/)
+│   ├── privkey.pem                      #   Private key (from dl.sxroomec.net/)
+│   └── chain.pem                        #   Let's Encrypt intermediate CA (from dl.sxroomec.net/)
 ├── cloud-init/
 │   └── fortigate.tpl                    # UPDATE: add cert + CA + admin-server-cert blocks
-├── versions.tf                          # UPDATE: add fortios provider
-├── variables.tf                         # UPDATE: add 5 new variables
+├── versions.tf                          # UPDATE: add fortios + aws providers
+├── variables.tf                         # UPDATE: add 7 new variables
 ├── locals_fortigate.tf                  # NEW: FortiGate config values as locals
 ├── resource_fortigate_system.tf         # NEW: global, dns, password-policy, accprofile
 ├── resource_fortigate_interface.tf      # NEW: port1, port2 config
@@ -500,6 +502,7 @@ xperts_threat_hunting/
 ├── resource_fortigate_security.tf       # NEW: IPS sensor, app-ctrl, webfilter profiles
 ├── resource_fortigate_policy.tf         # NEW: firewall policies, VIP, local-in policy
 ├── resource_fortigate_log.tf            # NEW: FortiAnalyzer logging config
+├── resource_dns.tf                     # NEW: Route 53 A records for FortiGate and FortiAnalyzer
 ├── (all existing .tf files unchanged)
 ```
 
@@ -509,6 +512,9 @@ xperts_threat_hunting/
 Layer 0 — Bootstrap (cloud-init, before Terraform fortios provider):
   SSL certificates (fullchain local cert, LetsEncrypt_CA remote CA)
   admin-server-cert "fullchain" binding
+
+Layer 0.5 — Depends on Azure public IPs:
+  Route 53 A records (dl-fg-<n>.dl.sxroomec.net, dl-faz-<n>.dl.sxroomec.net)
 
 Layer 1 — No dependencies:
   system global (admin-server-cert already set at bootstrap), dns, password-policy, accprofile
@@ -560,13 +566,12 @@ Layer 15 — No FortiGate object dependencies:
 
 1. **Two-phase deployment.** The `fortios` provider requires API connectivity
    to the FortiGate. Run `terraform apply` for Azure infrastructure first,
-   then supply the FortiGate FQDN and API token for the second apply.
+   then supply the FortiGate API token for the second apply.
    Alternatively, use `depends_on` with the FortiGate VM resource and accept
    that the first apply handles only Azure resources. The SSL certificate is
    injected at bootstrap (cloud-init), so the admin GUI serves a valid
    Let's Encrypt cert from first boot — enabling `insecure = false` on the
-   `fortios` provider. DNS for `dl-fg-<student-number>.sxroomec.net` must
-   resolve to the FortiGate public IP before the second apply.
+   `fortios` provider.
 
 2. **Locals-driven pattern.** Follow the existing project convention:
    define all FortiGate configuration values in `locals_fortigate.tf` as
@@ -600,7 +605,7 @@ Layer 15 — No FortiGate object dependencies:
    without functional impact on the lab.
 
 9. **SSL certificate at bootstrap.** The Let's Encrypt wildcard certificate
-   (`*.sxroomec.net`) is injected via cloud-init rather than managed by the
+   (`*.dl.sxroomec.net`) is injected via cloud-init rather than managed by the
    `fortios` provider. This is required because the `fortios` provider needs
    a valid TLS connection (`insecure = false`) to the FortiGate API, creating
    a chicken-and-egg problem if the cert were managed by the provider itself.
@@ -608,6 +613,13 @@ Layer 15 — No FortiGate object dependencies:
    `terraform apply`. Certificate renewal (every 90 days) requires updating
    the files in `certs/` and redeploying or running a fresh `terraform apply`
    to regenerate the cloud-init with the new PEM content.
+
+10. **Automated DNS via Route 53.** The `aws` provider creates A records in the
+    `dl.sxroomec.net` hosted zone for both FortiGate (`dl-fg-<n>.dl.sxroomec.net`)
+    and FortiAnalyzer (`dl-faz-<n>.dl.sxroomec.net`) using the Azure public IPs
+    allocated at deploy time. The `fortigate_api_hostname` variable is replaced by
+    a computed local (`local.fortigate_api_host`), eliminating manual DNS configuration.
+    The `student_number` variable drives unique per-student FQDNs.
 
 ---
 
@@ -617,7 +629,7 @@ Layer 15 — No FortiGate object dependencies:
 |------|----------------|
 | `terraform plan` | All FortiGate resources shown as "to be created" |
 | `terraform apply` | Completes without errors |
-| Admin GUI TLS certificate | `https://dl-fg-<student-number>.sxroomec.net:10443` serves the Let's Encrypt wildcard cert (no browser warning) |
+| Admin GUI TLS certificate | `https://dl-fg-<student-number>.dl.sxroomec.net:10443` serves the Let's Encrypt wildcard cert (no browser warning) |
 | `get vpn certificate local` (CLI) | Shows `fullchain` entry with correct cert |
 | `get vpn certificate ca` (CLI) | Shows `LetsEncrypt_CA` entry |
 | `get system global \| grep admin-server-cert` | Returns `fullchain` |

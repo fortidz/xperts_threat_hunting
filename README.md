@@ -53,6 +53,7 @@ Internet
 | Terraform | 1.5+ |
 | AzureRM provider | ~> 4.0 |
 | fortios provider | ~> 1.22 |
+| AWS provider | ~> 5.0 |
 | Azure CLI | 2.x (for auth) |
 
 ### Azure Marketplace Terms
@@ -82,12 +83,12 @@ az account set --subscription "<subscription-id>"
 
 ### SSL Certificates
 
-The FortiGate admin GUI is served with a Let's Encrypt wildcard certificate (`*.sxroomec.net`). Before deploying, copy the certificate files into the `certs/` directory:
+The FortiGate admin GUI is served with a Let's Encrypt wildcard certificate (`*.dl.sxroomec.net`). Before deploying, copy the certificate files into the `certs/` directory:
 
 ```bash
-cp /path/to/sxroomec.net/fullchain.pem certs/
-cp /path/to/sxroomec.net/privkey.pem   certs/
-cp /path/to/sxroomec.net/chain.pem     certs/
+cp /path/to/dl.sxroomec.net/fullchain.pem certs/
+cp /path/to/dl.sxroomec.net/privkey.pem   certs/
+cp /path/to/dl.sxroomec.net/chain.pem     certs/
 ```
 
 The `certs/` directory is git-ignored — private keys must never be committed.
@@ -109,9 +110,12 @@ $EDITOR terraform.tfvars
 
 # 3. Place SSL certificates
 mkdir -p certs
-cp /path/to/sxroomec.net/{fullchain,privkey,chain}.pem certs/
+cp /path/to/dl.sxroomec.net/{fullchain,privkey,chain}.pem certs/
 
-# 4. Set sensitive values as env variables (recommended — avoids writing secrets to disk)
+# 4. Set student_number in terraform.tfvars
+#    student_number = 1
+
+# 5. Set sensitive values as env variables (recommended — avoids writing secrets to disk)
 export TF_VAR_admin_password="YourStr0ng!Pass"
 export TF_VAR_fortiflex_fgt_token="FGT_TOKEN"       # optional
 export TF_VAR_fortiflex_faz_token="FAZ_TOKEN"        # optional
@@ -119,8 +123,10 @@ export TF_VAR_fortigate_api_token="API_TOKEN"
 export TF_VAR_ipsec_psk="YourPSK"
 export TF_VAR_vpnuser1_password="VpnUser1Pass!"
 export TF_VAR_guest_password="GuestPass!"
+export TF_VAR_aws_access_key="AKIA..."
+export TF_VAR_aws_secret_key="..."
 
-# 5. Initialize, plan, apply
+# 6. Initialize, plan, apply
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
@@ -130,10 +136,10 @@ terraform apply tfplan
 
 After the Azure infrastructure is deployed and the FortiGate VM is booted:
 
-1. Ensure DNS `dl-fg-<student-number>.sxroomec.net` resolves to the FortiGate public IP
-2. Create a REST API admin token on the FortiGate (System > Administrators > REST API Admin)
-3. Set `fortigate_api_hostname` in `terraform.tfvars` (e.g., `dl-fg-01.sxroomec.net:10443`)
-4. Run `terraform apply` again — the `fortios` provider will configure the device
+> DNS is managed automatically via Route 53. The A records for `dl-fg-<n>.dl.sxroomec.net` and `dl-faz-<n>.dl.sxroomec.net` are created during Phase 1 and point to the respective public IPs.
+
+1. Create a REST API admin token on the FortiGate (System > Administrators > REST API Admin)
+2. Run `terraform apply` again — the `fortios` provider will configure the device
 
 > The SSL certificate is injected at bootstrap (cloud-init), so the admin GUI
 > serves a valid Let's Encrypt cert from first boot. The `fortios` provider
@@ -147,6 +153,7 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `student_number` | yes | — | Student number (1–999) — drives DNS names |
 | `resource_group_name` | yes | — | Azure Resource Group name |
 | `location` | no | `eastus` | Azure region |
 | `admin_username` | no | `datalake` | Admin user for all VMs |
@@ -165,11 +172,17 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `fortigate_api_hostname` | yes | — | FortiGate API FQDN (`dl-fg-<student>.sxroomec.net:10443`) |
 | `fortigate_api_token` | yes | — | REST API token (sensitive) |
 | `ipsec_psk` | yes | — | IPsec VPN pre-shared key (sensitive) |
 | `vpnuser1_password` | yes | — | Password for VPN user `vpnuser1` (sensitive) |
 | `guest_password` | yes | — | Password for local user `guest` (sensitive) |
+
+### AWS (Route 53 DNS)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `aws_access_key` | yes | — | AWS Access Key ID (sensitive) |
+| `aws_secret_key` | yes | — | AWS Secret Access Key (sensitive) |
 
 ---
 
@@ -178,6 +191,7 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 | Output | Description |
 |---|---|
 | `fortigate_public_ip` | FortiGate management / VPN public IP |
+| `fortigate_fqdn` | FortiGate DNS FQDN (Route 53 managed) |
 | `fortigate_management_url` | `https://<public-ip>` |
 | `fortigate_port1_private_ip` | FortiGate internal port1 IP (snet-external) |
 | `fortigate_port2_private_ip` | FortiGate internal port2 IP (snet-internal / UDR next-hop) |
@@ -222,6 +236,7 @@ xperts_threat_hunting/
 ├── resource_network_interface.tf    # NICs for all VMs
 ├── resource_virtual_machine.tf      # FortiGate, FortiAnalyzer, watchtower VMs
 ├── resource_storage.tf              # Storage account + blob container
+├── resource_dns.tf                  # Route 53 A records (FortiGate + FortiAnalyzer)
 │
 ├── resource_fortigate_system.tf     # FortiGate global settings, DNS, password policy
 ├── resource_fortigate_interface.tf  # FortiGate port1/port2 interface config
@@ -253,7 +268,7 @@ The `fortios` provider manages the full FortiGate device configuration:
 | Category | Resources |
 |----------|-----------|
 | **System** | Global settings (hostname, admin-sport 10443, admin-server-cert), DNS, password policy, access profile |
-| **SSL Certificates** | Let's Encrypt wildcard cert (`*.sxroomec.net`) injected at bootstrap for admin GUI TLS |
+| **SSL Certificates** | Let's Encrypt wildcard cert (`*.dl.sxroomec.net`) injected at bootstrap for admin GUI TLS |
 | **Interfaces** | port1 (external), port2 (internal) with static IPs and access control |
 | **Routing** | Default route via port1, internal subnet route via port2 |
 | **Firewall Objects** | Address objects (ipmask, iprange, FQDN), address groups, service groups |
@@ -263,6 +278,7 @@ The `fortios` provider manages the full FortiGate device configuration:
 | **IPsec VPN** | Remote access dialup (IKEv2, AES256-SHA256, EAP, mode-cfg pool 10.10.100.0/24) |
 | **Users** | Local users (guest, vpnuser1), user groups (RA_IPSEC_USERS) |
 | **Logging** | FortiAnalyzer integration (realtime upload, reliable transport) |
+| **DNS** | Route 53 A records: `dl-fg-<n>.dl.sxroomec.net` (FortiGate), `dl-faz-<n>.dl.sxroomec.net` (FortiAnalyzer) |
 | **Local-In Policy** | Blocks inbound from Tor exit/relay nodes and malicious servers |
 
 See `SPEC_fortigate_config.md` for the full configuration specification.
@@ -290,14 +306,14 @@ The token is injected via `custom_data` using a multipart/mixed MIME bootstrap. 
 - FortiGate first-boot can take 5–10 minutes; monitor via serial console
 
 **fortios provider connection error**
-- Ensure DNS `dl-fg-<student-number>.sxroomec.net` resolves to the FortiGate public IP
+- DNS is managed automatically via Route 53 — verify the A record for `dl-fg-<n>.dl.sxroomec.net` points to the FortiGate public IP
 - Verify the REST API token is valid and has the correct admin profile
 - Confirm the SSL certificate files are present in `certs/` (fullchain.pem, privkey.pem, chain.pem)
 - Check that port 10443 is reachable (NSG Allow-Admin-HTTPS rule at priority 105)
 
 **TLS certificate validation error on fortios provider**
 - The `fortios` provider uses `insecure = false` — requires a valid cert matching the hostname
-- Verify the FQDN in `fortigate_api_hostname` matches the cert SAN (`*.sxroomec.net`)
+- Verify the FQDN matches the cert SAN (`*.dl.sxroomec.net`)
 - Ensure cert files in `certs/` are current (Let's Encrypt certs expire every 90 days)
 
 **workload VM cannot reach internet**
