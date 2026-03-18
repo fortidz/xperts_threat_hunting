@@ -53,8 +53,7 @@ Internet
 | Terraform | 1.5+ |
 | AzureRM provider | ~> 4.0 |
 | fortios provider | ~> 1.22 |
-| AWS provider | ~> 5.0 |
-| Azure CLI | 2.x (for auth) |
+| Azure CLI | 2.x (for local auth) |
 
 ### Azure Marketplace Terms
 
@@ -74,30 +73,20 @@ az vm image terms accept \
   --plan fortinet-fortianalyzer
 ```
 
-### Authentication
+---
+
+## Deployment Options
+
+### Option A — Local CLI
+
+#### Authentication
 
 ```bash
 az login
 az account set --subscription "<subscription-id>"
 ```
 
-### SSL Certificates
-
-The FortiGate admin GUI is served with a Let's Encrypt wildcard certificate (`*.dl.sxroomec.net`). Before deploying, copy the certificate files into the `certs/` directory:
-
-```bash
-cp /path/to/dl.sxroomec.net/fullchain.pem certs/
-cp /path/to/dl.sxroomec.net/privkey.pem   certs/
-cp /path/to/dl.sxroomec.net/chain.pem     certs/
-```
-
-The `certs/` directory is git-ignored — private keys must never be committed.
-
----
-
-## Quick Start
-
-### Phase 1 — Azure Infrastructure
+#### Phase 1 — Azure Infrastructure
 
 ```bash
 # 1. Clone and enter the repo
@@ -108,42 +97,121 @@ cd xperts_threat_hunting
 cp terraform.tfvars.example terraform.tfvars
 $EDITOR terraform.tfvars
 
-# 3. Place SSL certificates
-mkdir -p certs
-cp /path/to/dl.sxroomec.net/{fullchain,privkey,chain}.pem certs/
-
-# 4. Set student_number in terraform.tfvars
-#    student_number = 1
-
-# 5. Set sensitive values as env variables (recommended — avoids writing secrets to disk)
+# 3. Set sensitive values as env variables (avoids writing secrets to disk)
 export TF_VAR_admin_password="YourStr0ng!Pass"
-export TF_VAR_fortiflex_fgt_token="FGT_TOKEN"       # optional
-export TF_VAR_fortiflex_faz_token="FAZ_TOKEN"        # optional
 export TF_VAR_fortigate_api_token="API_TOKEN"
 export TF_VAR_ipsec_psk="YourPSK"
 export TF_VAR_vpnuser1_password="VpnUser1Pass!"
 export TF_VAR_guest_password="GuestPass!"
-export TF_VAR_aws_access_key="AKIA..."
-export TF_VAR_aws_secret_key="..."
+export TF_VAR_fortiflex_fgt_token="FGT_TOKEN"   # optional
+export TF_VAR_fortiflex_faz_token="FAZ_TOKEN"    # optional
 
-# 6. Initialize, plan, apply
+# 4. Initialize and deploy Azure infrastructure
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-### Phase 2 — FortiGate Configuration
+#### Phase 2 — FortiGate Configuration
 
-After the Azure infrastructure is deployed and the FortiGate VM is booted:
+After the FortiGate VM is booted (~3-5 minutes):
 
-> DNS is managed automatically via Route 53. The A records for `dl-fg-<n>.dl.sxroomec.net` and `dl-faz-<n>.dl.sxroomec.net` are created during Phase 1 and point to the respective public IPs.
+1. Note the FortiGate public IP from the Phase 1 output
+2. Set `fortigate_api_hostname` in your `terraform.tfvars` to the public IP
+3. Create a REST API admin token on the FortiGate (System > Administrators > REST API Admin)
+4. Run `terraform apply` again — the `fortios` provider configures the device
 
-1. Create a REST API admin token on the FortiGate (System > Administrators > REST API Admin)
-2. Run `terraform apply` again — the `fortios` provider will configure the device
+> The `fortios` provider connects with `insecure = true` (FortiGate default self-signed certificate).
 
-> The SSL certificate is injected at bootstrap (cloud-init), so the admin GUI
-> serves a valid Let's Encrypt cert from first boot. The `fortios` provider
-> connects with TLS validation enabled (`insecure = false`).
+---
+
+### Option B — GitHub Actions (CI/CD)
+
+A GitHub Actions workflow (`.github/workflows/terraform.yml`) automates deployment using Azure OIDC authentication.
+
+#### 1. Create an Azure Service Principal with OIDC
+
+```bash
+# Create app registration
+az ad app create --display-name "github-xperts-terraform"
+APP_ID=$(az ad app list --display-name "github-xperts-terraform" --query "[0].appId" -o tsv)
+
+# Create service principal and assign Contributor role
+az ad sp create --id $APP_ID
+az role assignment create \
+  --assignee $APP_ID \
+  --role Contributor \
+  --scope /subscriptions/<subscription-id>
+
+# Add federated credential for GitHub Actions (main branch)
+APP_OBJECT_ID=$(az ad app list --display-name "github-xperts-terraform" --query "[0].id" -o tsv)
+az ad app federated-credential create --id $APP_OBJECT_ID --parameters '{
+  "name": "github-main",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:fortidz/xperts_threat_hunting:ref:refs/heads/main",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+```
+
+#### 2. Create a Terraform State Storage Account
+
+```bash
+az group create -n tfstate-rg -l eastus
+az storage account create -n yourorgterraformstate -g tfstate-rg -l eastus --sku Standard_LRS
+az storage container create -n tfstate --account-name yourorgterraformstate
+```
+
+Then uncomment and update the `backend "azurerm"` block in `versions.tf`.
+
+#### 3. Configure GitHub Secrets
+
+Go to **Settings > Secrets and variables > Actions > Secrets**:
+
+| Secret | Description |
+|--------|-------------|
+| `ARM_CLIENT_ID` | Azure app registration client ID |
+| `ARM_SUBSCRIPTION_ID` | Azure subscription ID |
+| `ARM_TENANT_ID` | Azure AD tenant ID |
+| `TF_VAR_ADMIN_PASSWORD` | VM admin password |
+| `TF_VAR_FORTIGATE_API_TOKEN` | FortiGate REST API token |
+| `TF_VAR_IPSEC_PSK` | IPsec VPN pre-shared key |
+| `TF_VAR_VPNUSER1_PASSWORD` | vpnuser1 password |
+| `TF_VAR_GUEST_PASSWORD` | guest user password |
+| `TF_VAR_FORTIFLEX_FGT_TOKEN` | FortiFlex FortiGate token *(optional)* |
+| `TF_VAR_FORTIFLEX_FAZ_TOKEN` | FortiFlex FortiAnalyzer token *(optional)* |
+
+#### 4. Configure GitHub Variables
+
+Go to **Settings > Secrets and variables > Actions > Variables**:
+
+| Variable | Example |
+|----------|---------|
+| `TF_VAR_RESOURCE_GROUP_NAME` | `xperts-lab-rg` |
+| `TF_VAR_STUDENT_NUMBER` | `1` |
+| `TF_VAR_LOCATION` | `eastus` |
+| `TF_VAR_CREATE_RESOURCE_GROUP` | `true` |
+| `TF_VAR_FORTIGATE_PORT1_IP` | `192.168.27.5` |
+| `TF_VAR_FORTIGATE_PORT2_IP` | `192.168.27.36` |
+| `TF_VAR_FORTIANALYZER_IP` | `192.168.27.6` |
+| `TF_VAR_DEPLOY_DATE` | `20260318` |
+| `TF_VAR_FORTIGATE_API_HOSTNAME` | *(set after Phase 1)* |
+
+#### 5. Run the Workflow
+
+Go to **Actions > "Terraform Deploy" > Run workflow**:
+
+| Action | What it does |
+|--------|-------------|
+| **plan** | Runs `terraform plan` (also runs automatically on push to main) |
+| **apply-infra** | Phase 1: deploys Azure resources only (VMs, networking, storage) |
+| **apply-all** | Phase 2: full apply including FortiGate configuration via `fortios` |
+| **destroy** | Tears down all resources |
+
+**Two-phase deployment flow:**
+
+1. Run **`apply-infra`** — deploys all Azure resources. The workflow output shows the FortiGate public IP.
+2. Update the `TF_VAR_FORTIGATE_API_HOSTNAME` variable with the FortiGate public IP. Wait ~3-5 minutes for the FortiGate to boot.
+3. Run **`apply-all`** — applies the full configuration including all FortiGate settings.
 
 ---
 
@@ -153,8 +221,9 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `student_number` | yes | — | Student number (1–999) — drives DNS names |
+| `student_number` | yes | — | Student number (1–999) |
 | `resource_group_name` | yes | — | Azure Resource Group name |
+| `create_resource_group` | no | `true` | `true` = create new RG; `false` = use existing |
 | `location` | no | `eastus` | Azure region |
 | `admin_username` | no | `datalake` | Admin user for all VMs |
 | `admin_password` | yes | — | Admin password (sensitive) |
@@ -172,17 +241,11 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `fortigate_api_hostname` | yes | — | Public IP or hostname to reach FortiGate API |
 | `fortigate_api_token` | yes | — | REST API token (sensitive) |
 | `ipsec_psk` | yes | — | IPsec VPN pre-shared key (sensitive) |
 | `vpnuser1_password` | yes | — | Password for VPN user `vpnuser1` (sensitive) |
 | `guest_password` | yes | — | Password for local user `guest` (sensitive) |
-
-### AWS (Route 53 DNS)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `aws_access_key` | yes | — | AWS Access Key ID (sensitive) |
-| `aws_secret_key` | yes | — | AWS Secret Access Key (sensitive) |
 
 ---
 
@@ -191,13 +254,12 @@ After the Azure infrastructure is deployed and the FortiGate VM is booted:
 | Output | Description |
 |---|---|
 | `fortigate_public_ip` | FortiGate management / VPN public IP |
-| `fortigate_fqdn` | FortiGate DNS FQDN (Route 53 managed) |
-| `fortigate_management_url` | `https://<public-ip>` |
-| `fortigate_port1_private_ip` | FortiGate internal port1 IP (snet-external) |
-| `fortigate_port2_private_ip` | FortiGate internal port2 IP (snet-internal / UDR next-hop) |
+| `fortigate_management_url` | `https://<public-ip>:10443` |
+| `fortigate_port1_private_ip` | FortiGate port1 IP (snet-external) |
+| `fortigate_port2_private_ip` | FortiGate port2 IP (snet-internal / UDR next-hop) |
 | `fortianalyzer_public_ip` | FortiAnalyzer public IP |
 | `fortianalyzer_private_ip` | FortiAnalyzer private IP |
-| `watchtower_private_ip` | Workload VM private IP (should be 192.168.27.37) |
+| `watchtower_private_ip` | Workload VM private IP (192.168.27.37) |
 | `storage_account_name` | Resolved storage account name |
 | `deployment_summary` | Structured summary of all deployed resources |
 
@@ -221,6 +283,9 @@ xperts_threat_hunting/
 ├── terraform.tfvars.example         # Example values (no secrets)
 ├── .gitignore                       # Excludes .tfvars, state, .terraform/, certs/
 │
+├── .github/workflows/
+│   └── terraform.yml                # GitHub Actions CI/CD workflow
+│
 ├── locals_constants.tf              # Named constants — ports, CIDRs, SKUs, names
 ├── locals_common.tf                 # Shared resource_group_name, location, tags
 ├── locals_network.tf                # VNet, subnet, NSG, UDR configuration maps
@@ -228,7 +293,7 @@ xperts_threat_hunting/
 ├── locals_storage.tf                # Storage account and container configuration
 ├── locals_fortigate.tf              # FortiGate config values (system, firewall, VPN, etc.)
 │
-├── resource_resource_group.tf       # Azure Resource Group
+├── resource_resource_group.tf       # Azure Resource Group (create or use existing)
 ├── resource_virtual_network.tf      # VNet + Subnets
 ├── resource_security_group.tf       # NSGs + subnet associations
 ├── resource_route_table.tf          # Route tables (UDR) + subnet associations
@@ -236,7 +301,6 @@ xperts_threat_hunting/
 ├── resource_network_interface.tf    # NICs for all VMs
 ├── resource_virtual_machine.tf      # FortiGate, FortiAnalyzer, watchtower VMs
 ├── resource_storage.tf              # Storage account + blob container
-├── resource_dns.tf                  # Route 53 A records (FortiGate + FortiAnalyzer)
 │
 ├── resource_fortigate_system.tf     # FortiGate global settings, DNS, password policy
 ├── resource_fortigate_interface.tf  # FortiGate port1/port2 interface config
@@ -249,13 +313,8 @@ xperts_threat_hunting/
 ├── resource_fortigate_policy.tf     # Firewall policies, VIP/DNAT, local-in policy
 ├── resource_fortigate_log.tf        # FortiAnalyzer logging configuration
 │
-├── certs/                           # SSL certificates (git-ignored)
-│   ├── fullchain.pem                #   Server cert + intermediate chain
-│   ├── privkey.pem                  #   Private key
-│   └── chain.pem                    #   Let's Encrypt intermediate CA
-│
 └── cloud-init/
-    ├── fortigate.tpl                # Bootstrap: license, SSL certs, admin-server-cert
+    ├── fortigate.tpl                # Bootstrap: auto-update disable + FortiFlex license
     └── fortianalyzer.tpl            # Bootstrap: hostname + FortiFlex license
 ```
 
@@ -267,8 +326,7 @@ The `fortios` provider manages the full FortiGate device configuration:
 
 | Category | Resources |
 |----------|-----------|
-| **System** | Global settings (hostname, admin-sport 10443, admin-server-cert), DNS, password policy, access profile |
-| **SSL Certificates** | Let's Encrypt wildcard cert (`*.dl.sxroomec.net`) injected at bootstrap for admin GUI TLS |
+| **System** | Global settings (hostname, admin-sport 10443), DNS, password policy, access profile |
 | **Interfaces** | port1 (external), port2 (internal) with static IPs and access control |
 | **Routing** | Default route via port1, internal subnet route via port2 |
 | **Firewall Objects** | Address objects (ipmask, iprange, FQDN), address groups, service groups |
@@ -278,7 +336,6 @@ The `fortios` provider manages the full FortiGate device configuration:
 | **IPsec VPN** | Remote access dialup (IKEv2, AES256-SHA256, EAP, mode-cfg pool 10.10.100.0/24) |
 | **Users** | Local users (guest, vpnuser1), user groups (RA_IPSEC_USERS) |
 | **Logging** | FortiAnalyzer integration (realtime upload, reliable transport) |
-| **DNS** | Route 53 A records: `dl-fg-<n>.dl.sxroomec.net` (FortiGate), `dl-faz-<n>.dl.sxroomec.net` (FortiAnalyzer) |
 | **Local-In Policy** | Blocks inbound from Tor exit/relay nodes and malicious servers |
 
 See `SPEC_fortigate_config.md` for the full configuration specification.
@@ -306,15 +363,9 @@ The token is injected via `custom_data` using a multipart/mixed MIME bootstrap. 
 - FortiGate first-boot can take 5–10 minutes; monitor via serial console
 
 **fortios provider connection error**
-- DNS is managed automatically via Route 53 — verify the A record for `dl-fg-<n>.dl.sxroomec.net` points to the FortiGate public IP
+- Verify `fortigate_api_hostname` is set to the correct FortiGate public IP
 - Verify the REST API token is valid and has the correct admin profile
-- Confirm the SSL certificate files are present in `certs/` (fullchain.pem, privkey.pem, chain.pem)
 - Check that port 10443 is reachable (NSG Allow-Admin-HTTPS rule at priority 105)
-
-**TLS certificate validation error on fortios provider**
-- The `fortios` provider uses `insecure = false` — requires a valid cert matching the hostname
-- Verify the FQDN matches the cert SAN (`*.dl.sxroomec.net`)
-- Ensure cert files in `certs/` are current (Let's Encrypt certs expire every 90 days)
 
 **workload VM cannot reach internet**
 - Confirm `fortigate_port2_ip` matches the actual port2 IP shown in `terraform output`
@@ -328,6 +379,11 @@ The token is injected via `custom_data` using a multipart/mixed MIME bootstrap. 
 **Marketplace image error on `terraform apply`**
 - Run the `az vm image terms accept` commands listed in Prerequisites
 - Terms must be accepted once per subscription, not per deployment
+
+**GitHub Actions — `apply-all` fails with fortios provider error**
+- Ensure `TF_VAR_FORTIGATE_API_HOSTNAME` is set to the FortiGate public IP (from Phase 1 output)
+- Wait at least 3-5 minutes after Phase 1 for the FortiGate to boot and become API-accessible
+- Verify the `TF_VAR_FORTIGATE_API_TOKEN` secret is set correctly
 
 ---
 
