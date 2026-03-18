@@ -10,8 +10,9 @@ A single-resource-group Azure deployment providing a threat hunting lab environm
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `student_number` | `number` | — | Student identifier (1–999). Drives unique DNS names: `dl-fg-<n>.dl.sxroomec.net`, `dl-faz-<n>.dl.sxroomec.net` |
+| `student_number` | `number` | — | Student identifier (1–999) |
 | `resource_group_name` | `string` | — | Name of the Azure Resource Group |
+| `create_resource_group` | `bool` | `true` | `true` = create new RG; `false` = use existing RG |
 | `location` | `string` | `"eastus"` | Azure region |
 | `admin_username` | `string` | `"datalake"` | Admin username for all VMs |
 | `admin_password` | `string` | — | Admin password for all VMs (sensitive) |
@@ -23,8 +24,7 @@ A single-resource-group Azure deployment providing a threat hunting lab environm
 | `fortianalyzer_image_version` | `string` | `"7.6.6"` | FortiAnalyzer image version (e.g. `7.6.6`, `8.0.0`) |
 | `fortiflex_fgt_token` | `string` | `""` | FortiFlex license token for FortiGate. Injected via `custom_data`. Leave empty to skip. (sensitive) |
 | `fortiflex_faz_token` | `string` | `""` | FortiFlex license token for FortiAnalyzer. Injected via `custom_data`. Leave empty to skip. (sensitive) |
-| `aws_access_key` | `string` | — | AWS Access Key ID for Route 53 DNS record management (sensitive) |
-| `aws_secret_key` | `string` | — | AWS Secret Access Key for Route 53 DNS record management (sensitive) |
+| `fortigate_api_hostname` | `string` | — | Hostname or public IP for the `fortios` provider to reach the FortiGate management API |
 | `fortigate_api_token` | `string` | — | REST API token for the `fortios` Terraform provider (sensitive) |
 | `ipsec_psk` | `string` | — | Pre-shared key for IPsec VPN phase1 (sensitive) |
 | `vpnuser1_password` | `string` | — | Password for local user `vpnuser1` (sensitive) |
@@ -39,8 +39,9 @@ A single-resource-group Azure deployment providing a threat hunting lab environm
 |---|---|
 | Name | `var.resource_group_name` |
 | Location | `var.location` |
+| Create or Use Existing | Controlled by `var.create_resource_group` (default `true`) |
 
-All resources below are deployed into this single resource group.
+When `create_resource_group = true`, Terraform creates the resource group. When `false`, it looks up the existing resource group by name via a data source. All resources below are deployed into this resource group.
 
 ---
 
@@ -233,9 +234,7 @@ All VMs use `lifecycle { ignore_changes = [custom_data] }`. This prevents Terraf
 |---|---|
 | SKU | Standard |
 | Allocation | Static |
-| DNS Label | None (DNS managed by Route 53) |
-
-> DNS is managed via Route 53: `dl-faz-<student-number>.dl.sxroomec.net` → FortiAnalyzer public IP. See [DNS (Route 53)](#dns-route-53) section.
+| DNS Label | None |
 
 ### Bootstrap (`custom_data`)
 
@@ -313,19 +312,6 @@ A **System-Assigned Managed Identity** is provisioned on the FAZ VM. This allows
 
 ---
 
-## DNS (Route 53)
-
-DNS records are managed automatically via the AWS `route53` provider. A records are created in the `dl.sxroomec.net` hosted zone after Azure public IPs are allocated.
-
-| Record | Type | TTL | Target | Purpose |
-|---|---|---|---|---|
-| `dl-fg-<student-number>.dl.sxroomec.net` | A | 300 | FortiGate public IP (`DL-FG-PIP`) | Admin GUI, fortios provider API, SSL-VPN |
-| `dl-faz-<student-number>.dl.sxroomec.net` | A | 300 | FortiAnalyzer public IP (`DL-FAZ-PIP`) | FortiAnalyzer management |
-
-> The `student_number` variable drives unique per-student FQDNs. The hosted zone is looked up via `data.aws_route53_zone` by domain name. A Let's Encrypt wildcard certificate (`*.dl.sxroomec.net`) is injected at FortiGate bootstrap to serve valid TLS on the admin GUI (port 10443).
-
----
-
 ## Security Layer
 
 ### FortiCNAPP
@@ -342,7 +328,7 @@ Flat configuration-as-data layout. No sub-modules. `locals_*.tf` files define *w
 xperts_threat_hunting/
 ├── SPEC.md                       # This file
 ├── README.md                     # Deployment guide and quick start
-├── versions.tf                   # Terraform >= 1.5, AzureRM ~> 4.0, fortios ~> 1.22, AWS ~> 5.0
+├── versions.tf                   # Terraform >= 1.5, AzureRM ~> 4.0, fortios ~> 1.22
 ├── variables.tf                  # All input variables with validation
 ├── outputs.tf                    # All outputs organised by resource type
 ├── terraform.tfvars.example      # Example variable values (no secrets)
@@ -362,7 +348,6 @@ xperts_threat_hunting/
 ├── resource_network_interface.tf # NICs for all VMs
 ├── resource_virtual_machine.tf   # FortiGate, FortiAnalyzer, watchtower VMs
 ├── resource_storage.tf           # Storage account + blob container
-├── resource_dns.tf              # Route 53 A records (FortiGate + FortiAnalyzer)
 │
 ├── locals_fortigate.tf          # FortiGate config values (system, firewall, VPN, etc.)
 ├── resource_fortigate_system.tf # FortiGate global settings, DNS, password policy
@@ -376,10 +361,8 @@ xperts_threat_hunting/
 ├── resource_fortigate_policy.tf # Firewall policies, VIP/DNAT, local-in policy
 ├── resource_fortigate_log.tf    # FortiAnalyzer logging configuration
 │
-├── certs/                       # SSL certificates (git-ignored)
-│
 └── cloud-init/
-    ├── fortigate.tpl             # Bootstrap: license, SSL certs, admin-server-cert
+    ├── fortigate.tpl             # Bootstrap: auto-update disable + FortiFlex license
     └── fortianalyzer.tpl         # Bootstrap: hostname + FortiFlex license
 ```
 
@@ -397,11 +380,9 @@ xperts_threat_hunting/
 | `fortigate_public_ip` | Public IP address of `DL-FG-PIP` |
 | `fortigate_port1_private_ip` | Static private IP of FortiGate port1 (`snet-external`) |
 | `fortigate_port2_private_ip` | Static private IP of FortiGate port2 (`snet-internal`) — UDR next-hop |
-| `fortigate_fqdn` | FortiGate DNS FQDN (`dl-fg-<n>.dl.sxroomec.net`, Route 53 managed) |
-| `fortigate_management_url` | `https://dl-fg-<n>.dl.sxroomec.net:10443` |
+| `fortigate_management_url` | `https://<fortigate-public-ip>:10443` |
 | `fortianalyzer_public_ip` | Public IP address of `DL-FAZ-PIP` |
 | `fortianalyzer_private_ip` | Static private IP of FortiAnalyzer NIC (`snet-external`) |
-| `fortianalyzer_fqdn` | FortiAnalyzer DNS FQDN (`dl-faz-<n>.dl.sxroomec.net`, Route 53 managed) |
 | `watchtower_private_ip` | Static private IP of `watchtower` (should be `192.168.27.37`) |
 | `storage_account_name` | Resolved storage account name (e.g. `20260224sdatalake`) |
 | `storage_container_name` | Blob container name (`fazdatalake`) |
@@ -420,8 +401,6 @@ xperts_threat_hunting/
 | `admin_password` | Applied to all VMs |
 | `fortiflex_fgt_token` | FortiGate FortiFlex license token |
 | `fortiflex_faz_token` | FortiAnalyzer FortiFlex license token |
-| `aws_access_key` | AWS Access Key ID for Route 53 |
-| `aws_secret_key` | AWS Secret Access Key for Route 53 |
 | `fortigate_api_token` | REST API token for fortios provider |
 | `ipsec_psk` | IPsec VPN pre-shared key |
 | `vpnuser1_password` | VPN user password |

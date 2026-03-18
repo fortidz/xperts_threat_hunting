@@ -31,15 +31,6 @@ locals {
   ssh_port = "22"
 
   ###########################################################################
-  # DNS — Route 53 managed domain
-  ###########################################################################
-
-  dns_domain         = "dl.sxroomec.net"
-  fortigate_fqdn     = "dl-fg-${var.student_number}.${local.dns_domain}"
-  fortianalyzer_fqdn = "dl-faz-${var.student_number}.${local.dns_domain}"
-  fortigate_api_host = "${local.fortigate_fqdn}:${local.fgt_port_admin_https}"
-
-  ###########################################################################
   # OS disk sizes (GB)
   ###########################################################################
 

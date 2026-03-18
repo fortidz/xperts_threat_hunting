@@ -10,10 +10,6 @@ terraform {
       source  = "fortinetdev/fortios"
       version = "~> 1.22"
     }
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
   }
 }
 
@@ -26,14 +22,8 @@ provider "azurerm" {
   }
 }
 
-provider "aws" {
-  region     = "us-east-1"
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
-}
-
 provider "fortios" {
-  hostname = local.fortigate_api_host
+  hostname = "${var.fortigate_api_hostname}:${local.fgt_port_admin_https}"
   token    = var.fortigate_api_token
-  insecure = false # valid Let's Encrypt wildcard cert injected at bootstrap
+  insecure = true
 }

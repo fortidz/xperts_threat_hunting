@@ -6,7 +6,6 @@ resource "fortios_system_global" "global" {
   hostname          = local.fgt_hostname
   alias             = local.fgt_alias
   admin_sport       = local.fgt_admin_sport
-  admin_server_cert = local.fgt_admin_server_cert
   admintimeout      = local.fgt_admintimeout
   timezone          = local.fgt_timezone
   gui_theme         = local.fgt_gui_theme

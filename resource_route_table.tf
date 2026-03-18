@@ -18,7 +18,6 @@ resource "azurerm_route_table" "rt" {
     }
   }
 
-  depends_on = [azurerm_resource_group.rg]
 }
 
 resource "azurerm_subnet_route_table_association" "rt_assoc" {

@@ -23,7 +23,6 @@ resource "azurerm_network_security_group" "nsg" {
     }
   }
 
-  depends_on = [azurerm_resource_group.rg]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_assoc" {

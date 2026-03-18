@@ -9,5 +9,4 @@ resource "azurerm_public_ip" "pip" {
   domain_name_label   = lookup(each.value, "domain_name_label", null)
   tags                = each.value.tags
 
-  depends_on = [azurerm_resource_group.rg]
 }

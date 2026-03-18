@@ -3,10 +3,7 @@
 ###############################################################################
 
 variable "student_number" {
-  description = <<-EOT
-    Student number for this lab instance (plain integer).
-    Used to generate unique DNS names: dl-fg-<n>.dl.sxroomec.net, dl-faz-<n>.dl.sxroomec.net
-  EOT
+  description = "Student number for this lab instance (plain integer, 1–999)."
   type        = number
 
   validation {
@@ -27,6 +24,16 @@ variable "resource_group_name" {
     condition     = can(regex("^[a-zA-Z0-9._()-]{1,90}$", var.resource_group_name))
     error_message = "resource_group_name must be 1-90 characters: letters, numbers, underscores, hyphens, dots, or parentheses."
   }
+}
+
+variable "create_resource_group" {
+  description = <<-EOT
+    Controls whether Terraform creates the resource group or uses an existing one.
+    true  = create a new resource group with var.resource_group_name
+    false = look up an existing resource group by var.resource_group_name
+  EOT
+  type        = bool
+  default     = true
 }
 
 variable "location" {
@@ -215,24 +222,18 @@ variable "fortiflex_faz_token" {
 }
 
 ###############################################################################
-# Required — AWS (Route 53 DNS)
-###############################################################################
-
-variable "aws_access_key" {
-  description = "AWS Access Key ID for Route 53 DNS record management."
-  type        = string
-  sensitive   = true
-}
-
-variable "aws_secret_key" {
-  description = "AWS Secret Access Key for Route 53 DNS record management."
-  type        = string
-  sensitive   = true
-}
-
-###############################################################################
 # Required — FortiGate Configuration (fortios provider)
 ###############################################################################
+
+variable "fortigate_api_hostname" {
+  description = <<-EOT
+    Hostname or public IP address used by the fortios Terraform provider to reach
+    the FortiGate management API. The provider connects to this address on the
+    admin-sport port (10443).
+    Example: "203.0.113.10" or "fg.example.com"
+  EOT
+  type        = string
+}
 
 variable "fortigate_api_token" {
   description = <<-EOT

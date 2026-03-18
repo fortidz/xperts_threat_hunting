@@ -6,7 +6,6 @@ locals {
   fgt_hostname          = "DL-fgt"
   fgt_alias             = "DL-fgt"
   fgt_admin_sport       = 10443
-  fgt_admin_server_cert = "fullchain"
   fgt_admintimeout      = 60
   fgt_timezone          = "04" # US/Pacific (FortiOS timezone code)
   fgt_gui_theme         = "mariner"

@@ -16,7 +16,6 @@ locals {
       name              = local.fortianalyzer_pip_name
       sku               = "Standard"
       allocation_method = "Static"
-      # DNS managed by Route 53: dl-faz-<student>.dl.sxroomec.net
       domain_name_label = null
       tags              = local.common_tags
     })
@@ -109,9 +108,6 @@ locals {
         "${path.module}/cloud-init/fortigate.tpl",
         {
           var_fortiflex_token = var.fortiflex_fgt_token
-          var_fullchain_pem   = file("${path.module}/certs/fullchain.pem")
-          var_privkey_pem     = file("${path.module}/certs/privkey.pem")
-          var_chain_pem       = file("${path.module}/certs/chain.pem")
         }
       ))
 

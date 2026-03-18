@@ -7,7 +7,6 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = each.value.address_space
   tags                = each.value.tags
 
-  depends_on = [azurerm_resource_group.rg]
 }
 
 resource "azurerm_subnet" "subnet" {
