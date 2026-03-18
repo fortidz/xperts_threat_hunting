@@ -1,0 +1,136 @@
+name: Terraform Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to run"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply-infra
+          - apply-all
+          - destroy
+      student_number:
+        description: "Student number (1–999)"
+        required: true
+        type: number
+
+permissions:
+  id-token: write   # Required for OIDC authentication to Azure
+  contents: read
+
+env:
+  # Azure OIDC authentication
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_USE_OIDC: "true"
+
+  # Terraform variables — secrets
+  TF_VAR_admin_password: ${{ secrets.TF_VAR_ADMIN_PASSWORD }}
+  TF_VAR_fortigate_api_token: ${{ secrets.TF_VAR_FORTIGATE_API_TOKEN }}
+  TF_VAR_ipsec_psk: ${{ secrets.TF_VAR_IPSEC_PSK }}
+  TF_VAR_vpnuser1_password: ${{ secrets.TF_VAR_VPNUSER1_PASSWORD }}
+  TF_VAR_guest_password: ${{ secrets.TF_VAR_GUEST_PASSWORD }}
+  TF_VAR_fortiflex_fgt_token: ${{ secrets.TF_VAR_FORTIFLEX_FGT_TOKEN }}
+  TF_VAR_fortiflex_faz_token: ${{ secrets.TF_VAR_FORTIFLEX_FAZ_TOKEN }}
+
+  # Terraform variables — non-sensitive
+  TF_VAR_student_number: ${{ inputs.student_number || vars.TF_VAR_STUDENT_NUMBER }}
+  TF_VAR_resource_group_name: ${{ vars.TF_VAR_RESOURCE_GROUP_NAME }}
+  TF_VAR_create_resource_group: ${{ vars.TF_VAR_CREATE_RESOURCE_GROUP || 'true' }}
+  TF_VAR_location: ${{ vars.TF_VAR_LOCATION || 'eastus' }}
+  TF_VAR_fortigate_port1_ip: ${{ vars.TF_VAR_FORTIGATE_PORT1_IP }}
+  TF_VAR_fortigate_port2_ip: ${{ vars.TF_VAR_FORTIGATE_PORT2_IP }}
+  TF_VAR_fortianalyzer_ip: ${{ vars.TF_VAR_FORTIANALYZER_IP }}
+  TF_VAR_deploy_date: ${{ vars.TF_VAR_DEPLOY_DATE }}
+  TF_VAR_fortigate_api_hostname: ${{ vars.TF_VAR_FORTIGATE_API_HOSTNAME || '0.0.0.0' }}
+
+jobs:
+  terraform:
+    name: Terraform ${{ inputs.action || 'plan' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      # ---------------------------------------------------------------
+      # Plan-only (push to main, or manual "plan")
+      # ---------------------------------------------------------------
+      - name: Terraform Plan
+        if: github.event_name == 'push' || inputs.action == 'plan'
+        run: terraform plan -input=false
+
+      # ---------------------------------------------------------------
+      # Apply — Azure infrastructure only (Phase 1)
+      # Deploys VMs, networking, storage. FortiGate is not yet reachable
+      # so fortios resources are excluded via -target.
+      # ---------------------------------------------------------------
+      - name: Terraform Apply (infra only)
+        if: inputs.action == 'apply-infra'
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=azurerm_resource_group.rg \
+            -target=data.azurerm_resource_group.existing \
+            -target=azurerm_virtual_network.vnet \
+            -target=azurerm_subnet.subnet \
+            -target=azurerm_network_security_group.nsg \
+            -target=azurerm_subnet_network_security_group_association.nsg_assoc \
+            -target=azurerm_route_table.rt \
+            -target=azurerm_subnet_route_table_association.rt_assoc \
+            -target=azurerm_public_ip.pip \
+            -target=azurerm_network_interface.nic \
+            -target=azurerm_virtual_machine.vm \
+            -target=azurerm_storage_account.storage \
+            -target=azurerm_storage_container.container
+
+      - name: Show FortiGate Public IP
+        if: inputs.action == 'apply-infra'
+        run: |
+          echo "::notice::Infra deployed. Get the FortiGate public IP from outputs below."
+          echo "::notice::Update the TF_VAR_FORTIGATE_API_HOSTNAME repository variable with this IP, then run 'apply-all'."
+          terraform output fortigate_public_ip || true
+          terraform output fortigate_management_url || true
+
+      # ---------------------------------------------------------------
+      # Apply — Full (Phase 2)
+      # Requires FortiGate to be booted and API-accessible on port 10443.
+      # Set TF_VAR_FORTIGATE_API_HOSTNAME to the FortiGate public IP first.
+      # ---------------------------------------------------------------
+      - name: Terraform Apply (full)
+        if: inputs.action == 'apply-all'
+        run: terraform apply -input=false -auto-approve
+
+      # ---------------------------------------------------------------
+      # Destroy — Tear down everything
+      # ---------------------------------------------------------------
+      - name: Terraform Destroy
+        if: inputs.action == 'destroy'
+        run: terraform destroy -input=false -auto-approve
+
+      # ---------------------------------------------------------------
+      # Outputs
+      # ---------------------------------------------------------------
+      - name: Terraform Output
+        if: always() && (inputs.action == 'apply-infra' || inputs.action == 'apply-all')
+        run: terraform output || true

@@ -1,6 +1,17 @@
 terraform {
   required_version = ">= 1.5, < 2.0"
 
+  # Remote state in Azure Storage — required for GitHub Actions.
+  # Create the storage account + container first (see README), then uncomment:
+  #
+  # backend "azurerm" {
+  #   resource_group_name  = "tfstate-rg"
+  #   storage_account_name = "yourorgterraformstate"
+  #   container_name       = "tfstate"
+  #   key                  = "xperts-threat-hunting.tfstate"
+  #   use_oidc             = true
+  # }
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
